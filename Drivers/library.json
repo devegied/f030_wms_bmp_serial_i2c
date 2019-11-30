@@ -1,0 +1,10 @@
+{
+    "name": "CMSIS and STM32F0 HAL Driver",
+    "version": "1.7.3",
+    "platforms": "ststm32",
+    "build": {
+        "includeDir": "STM32F0xx_HAL_Driver/Inc",
+        "srcDir": "STM32F0xx_HAL_Driver/Src",
+        "flags": [ "-I CMSIS/Include", "-I CMSIS/Device/ST/STM32F0xx/Include", "-I ../Inc" ]
+    }
+}

@@ -1,0 +1,29 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558 
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "process",
+            "label": "Reset target",
+            "command": "${env:USERPROFILE}\\.platformio\\packages\\toolchain-gccarmnoneeabi\\bin\\arm-none-eabi-gdb.exe",
+            "args": [
+                "-nx",
+                "--batch",
+                "-ex",
+                "target extended-remote COM7",
+                "-ex",
+                "monitor swdp_scan",
+                "-ex",
+                "attach 1",
+                "-ex",
+                "kill"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
