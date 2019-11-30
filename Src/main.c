@@ -83,112 +83,72 @@ static void MX_I2C1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* writes to transmitter fifo, can loose bytes if fifo is full */
-void uart_write(const uint8_t *buf, int len){
-	while (len) {
-		if (fifo_put(uart1.tx, *buf) == 1U) {//byte successfuly added to fifo
-			++buf;
-			--len;
-		} else {
-			break;
-		}
-		/* enable the" transmit register empty" interrupt to start things flowing */
-		SET_BIT(huart1.Instance->CR1, USART_CR1_TXEIE);//equivalent to __HAL_UART_ENABLE_IT(huart1, UART_IT_TXE);
-	}
-}
 /*"Slave transfer completed" interupt calback*/
 void HAL_I2C_SlaveTxCpltCallback(I2C_HandleTypeDef *hi2c){
   if(i2cState==I2C_SLAVE_READREG){//we are sending register values to the master
-    aTxBuffer[0]='D';
-    aTxBuffer[1]='R';
-    aTxBuffer[2]=hexBuf[(rv&0xF0U)>>4];
-    aTxBuffer[3]=hexBuf[rv&0x0FU];
+    uart_buffer("DR",2,&uart1);
+    uart_buffer_byte(hexBuf[(rv&0xF0U)>>4],&uart1);
+    uart_buffer_byte(hexBuf[rv&0x0FU],&uart1);
     i2cTxBuffer[0]=rv;
     if (HAL_I2C_Slave_Seq_Transmit_IT(hi2c, i2cTxBuffer, 1, I2C_FIRST_FRAME/*there will be no more restarts, but this is not the last frame*/) != HAL_OK) {
-      aTxBuffer[4]='\n';
-      aTxBuffer[5]='F';
-      aTxBuffer[6]='A';
-      aTxBuffer[7]='T';
-      aTxBuffer[8]='A';
-      aTxBuffer[9]='\n';
-      uart_write(aTxBuffer,10);
+      uart_write("\nFATAL\n",7,&uart1);
       Error_Handler();
     }else{
-      aTxBuffer[4]='\n';
-      uart_write(aTxBuffer,5);
+      uart_write("\n",1,&uart1);
     }
     rv++;
   }else if(i2cState==I2C_SLAVE_SENDSTAT){
-    aTxBuffer[0]='S';
-    aTxBuffer[1]='R';
+    uart_buffer("SR",2,&uart1);
     if (HAL_I2C_Slave_Seq_Transmit_IT(hi2c, i2cTxBuffer, 2, I2C_FIRST_FRAME/*there will be no more restarts, but this is not the last frame*/) != HAL_OK) {
-      aTxBuffer[2]='\n';
-      aTxBuffer[3]='F';
-      aTxBuffer[4]='A';
-      aTxBuffer[5]='T';
-      aTxBuffer[6]='A';
-      aTxBuffer[7]='L';
-      aTxBuffer[8]='\n';
-      uart_write(aTxBuffer,9);
+      uart_write("\nFATAL\n",7,&uart1);
       Error_Handler();
     }else{
-      aTxBuffer[2]='\n';
-      uart_write(aTxBuffer,3);
+      uart_write("\n",1,&uart1);
     }
   }else{
-    aTxBuffer[0]='T';
-    aTxBuffer[1]='x';
-    aTxBuffer[2]='U';
-    aTxBuffer[3]='S';
-    aTxBuffer[4]=hexBuf[(i2cState&0xF0U)>>4];
-    aTxBuffer[5]=hexBuf[i2cState&0x0FU];
-    aTxBuffer[6]='\n';
-    uart_write(aTxBuffer,7);
+    uart_buffer("TxUS",4,&uart1);
+    uart_buffer_byte(hexBuf[(i2cState&0xF0U)>>4],&uart1);
+    uart_buffer_byte(hexBuf[i2cState&0x0FU],&uart1);
+    uart_write("\n",1,&uart1);
   }
 }
 /*"Slave receive completed" interupt calback*/
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c){
   if(i2cState==I2C_SLAVE_WAIT4ADDR){//first byte after address match, we got register number in aRxBuffer[0]
-    aTxBuffer[0]='R';
-    aTxBuffer[1]=hexBuf[(aRxBuffer[0]&0xF0U)>>4];
-    aTxBuffer[2]=hexBuf[aRxBuffer[0]&0x0FU];
-    aTxBuffer[3]='\n';
+    uart_buffer("R",1,&uart1);
+    uart_buffer_byte(hexBuf[(aRxBuffer[0]&0xF0U)>>4],&uart1);
+    uart_buffer_byte(hexBuf[aRxBuffer[0]&0x0FU],&uart1);
     i2cState=I2C_SLAVE_HAVEADDR;//we have address, master will restart with read op or will send next byte for write op
-    uart_write(aTxBuffer,4);
+    uart_write("\n",1,&uart1);
     if (HAL_I2C_Slave_Seq_Receive_IT(hi2c, aRxBuffer+1, 1, I2C_FIRST_AND_NEXT_FRAME/*not finish automaticaly after frame and allow restart*/) != HAL_OK) {//lets wait for next byte if it will be write op
-        Error_Handler();
+      uart_write("\nFATAL\n",7,&uart1);
+      Error_Handler();
     }
   }else if(i2cState==I2C_SLAVE_HAVEADDR||i2cState==I2C_SLAVE_WRITEREG){//we already have register number and now we got first or next data byte
-    aTxBuffer[0]='D';
-    aTxBuffer[1]='W';
-    aTxBuffer[2]=hexBuf[(aRxBuffer[1]&0xF0U)>>4];
-    aTxBuffer[3]=hexBuf[aRxBuffer[1]&0x0FU];
-    aTxBuffer[4]='\n';
+    uart_buffer("DW",1,&uart1);
+    uart_buffer_byte(hexBuf[(aRxBuffer[1]&0xF0U)>>4],&uart1);
+    uart_buffer_byte(hexBuf[aRxBuffer[1]&0x0FU],&uart1);
     i2cState=I2C_SLAVE_WRITEREG;
-    uart_write(aTxBuffer,5);
+    uart_write("\n",1,&uart1);
     if (HAL_I2C_Slave_Seq_Receive_IT(hi2c, aRxBuffer+1, 1, I2C_FIRST_FRAME/*not finish automaticaly after frame*/) != HAL_OK) {//lets try to get one more byte
+      uart_write("\nFATAL\n",7,&uart1);
 			Error_Handler();
     }
   }else{
-    aTxBuffer[0]='R';
-    aTxBuffer[1]='x';
-    aTxBuffer[2]='U';
-    aTxBuffer[3]='S';
-    aTxBuffer[4]=hexBuf[(i2cState&0xF0U)>>4];
-    aTxBuffer[5]=hexBuf[i2cState&0x0FU];
-    aTxBuffer[6]='\n';
-    uart_write(aTxBuffer,7);
+    uart_buffer("RxUS",4,&uart1);
+    uart_buffer_byte(hexBuf[(i2cState&0xF0U)>>4],&uart1);
+    uart_buffer_byte(hexBuf[i2cState&0x0FU],&uart1);
+    uart_write("\n",1,&uart1);
   }
 }
 /*"Slave address match and send/receive completed" interupt calback*/
 void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c){
-  aTxBuffer[0]='E';
-  aTxBuffer[1]='L';
-  aTxBuffer[2]=hexBuf[(i2cState&0xF0U)>>4];
-  aTxBuffer[3]=hexBuf[i2cState&0x0FU];
-  aTxBuffer[4]='\n';
-  uart_write(aTxBuffer,5);
+  uart_buffer("EL",2,&uart1);
+  uart_buffer_byte(hexBuf[(i2cState&0xF0U)>>4],&uart1);
+  uart_buffer_byte(hexBuf[i2cState&0x0FU],&uart1);
+  uart_write("\n",1,&uart1);
   if(HAL_I2C_EnableListen_IT(hi2c) != HAL_OK){// Restart listening
+    uart_write("\nFATAL\n",7,&uart1);
     Error_Handler();
   }else{
     i2cState=I2C_SLAVE_WAIT;
@@ -197,119 +157,80 @@ void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c){
 /*"I2C error" interupt calback*/
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c){
   if(i2cState==I2C_SLAVE_WAIT4ADDR && hi2c->ErrorCode==HAL_I2C_ERROR_AF){//we were in receive mode waiting for register and got NACK - master ended communication - typical situation for I2C bus scan
-    uart_write((uint8_t *)"busScan\n",8);
+    uart_write("busScan\n",8,&uart1);
   }else if((i2cState==I2C_SLAVE_READREG||//we were sending bytes from register
             i2cState==I2C_SLAVE_WRITEREG||//we were geting bytes to register
             i2cState==I2C_SLAVE_SENDSTAT) //we were sending status bytes
             && 
             hi2c->ErrorCode==HAL_I2C_ERROR_AF){//got NACK - master ended communication. Two bytes that we sent should be lost in the bus
-    uart_write((uint8_t *)"MasterNACK\n",11);
+    uart_write("MasterNACK\n",11,&uart1);
   }else{ // other error
-    aTxBuffer[0]='E';
-    aTxBuffer[1] = (hi2c->ErrorCode&HAL_I2C_ERROR_BERR)?'B':'_';//HAL_I2C_ERROR_BERR (0x0001U) - BERR: Bus error - START/STOP condition in wrong i2c protocol place
-    aTxBuffer[2] = (hi2c->ErrorCode&HAL_I2C_ERROR_ARLO)?'A':'_';//HAL_I2C_ERROR_ARLO (0x0002U) - ARLO: arbitration lost - slave got unexpected level from i2c bus
-    aTxBuffer[3] = (hi2c->ErrorCode&HAL_I2C_ERROR_AF)?'N':'_';//HAL_I2C_ERROR_AF   (0x0004U) - NACKF: masted did not acknowledge written data byte
-    aTxBuffer[4] = (hi2c->ErrorCode&HAL_I2C_ERROR_OVR)?'O':'_';//HAL_I2C_ERROR_OVR  (0x0008U) - OVR: Overrun/underrun, slave is too slow
-    aTxBuffer[5] = (hi2c->ErrorCode&HAL_I2C_ERROR_SIZE)?'S':'_';//HAL_I2C_ERROR_SIZE (0x0040U) - Size Management error
-    aTxBuffer[6]='/';
-    aTxBuffer[7]=hexBuf[(i2cState&0xF0U)>>4];
-    aTxBuffer[8]=hexBuf[i2cState&0x0FU];
-    aTxBuffer[9]='\n';
-    uart_write(aTxBuffer,10);
+    uart_buffer_byte('E',&uart1);
+    uart_buffer_byte((hi2c->ErrorCode&HAL_I2C_ERROR_BERR)?'B':'_',&uart1);//HAL_I2C_ERROR_BERR (0x0001U) - BERR: Bus error - START/STOP condition in wrong i2c protocol place
+    uart_buffer_byte((hi2c->ErrorCode&HAL_I2C_ERROR_ARLO)?'A':'_',&uart1);//HAL_I2C_ERROR_ARLO (0x0002U) - ARLO: arbitration lost - slave got unexpected level from i2c bus
+    uart_buffer_byte((hi2c->ErrorCode&HAL_I2C_ERROR_AF)?'N':'_',&uart1);//HAL_I2C_ERROR_AF   (0x0004U) - NACKF: masted did not acknowledge written data byte
+    uart_buffer_byte((hi2c->ErrorCode&HAL_I2C_ERROR_OVR)?'O':'_',&uart1);//HAL_I2C_ERROR_OVR  (0x0008U) - OVR: Overrun/underrun, slave is too slow
+    uart_buffer_byte((hi2c->ErrorCode&HAL_I2C_ERROR_SIZE)?'S':'_',&uart1);//HAL_I2C_ERROR_SIZE (0x0040U) - Size Management error
+    uart_buffer_byte('/',&uart1);
+    uart_buffer_byte(hexBuf[(i2cState&0xF0U)>>4],&uart1);
+    uart_buffer_byte(hexBuf[i2cState&0x0FU],&uart1);
+    uart_write("\n",1,&uart1);
   }
 }
 /*"I2C address match" interupt calback*/
 void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode){
   UNUSED(AddrMatchCode);//we have only one address so do not check it
-  aTxBuffer[0]='A';
+  uart_buffer_byte('A',&uart1);
   if(i2cState==I2C_SLAVE_WAIT){//first transaction step
     if(TransferDirection==I2C_DIRECTION_TRANSMIT/*from Master point of view*/){//master wants to write address of register
-      aTxBuffer[1]='W';
-      aTxBuffer[2]='R';
+      uart_buffer("WR",2,&uart1);
       i2cState=I2C_SLAVE_WAIT4ADDR;
       if (HAL_I2C_Slave_Seq_Receive_IT(hi2c, aRxBuffer, 1, I2C_NEXT_FRAME/*allow restart after received byte*/) != HAL_OK) {//read the registernumber  byte
-        aTxBuffer[3]='\n';
-        aTxBuffer[4]='F';
-        aTxBuffer[5]='A';
-        aTxBuffer[6]='T';
-        aTxBuffer[7]='A';
-        aTxBuffer[8]='L';
-        aTxBuffer[9]='\n';
-        uart_write(aTxBuffer,10);
+        uart_write("\nFATAL\n",7,&uart1);
 			  Error_Handler();
       }else{
-        aTxBuffer[3]='\n';
-        uart_write(aTxBuffer,4);
+        uart_write("\n",1,&uart1);
       }
     }else{//master wants to read from the beggining - report status
-      aTxBuffer[1]='R';
-      aTxBuffer[2]='S';
+      uart_buffer("RS",2,&uart1);
       i2cState=I2C_SLAVE_SENDSTAT;/*master reads status - we allways try to give all of what we have at the moment*/
       if (HAL_I2C_Slave_Seq_Transmit_IT(hi2c, i2cTxBuffer, 2, I2C_FIRST_FRAME/*there will be no restarts*/) != HAL_OK) {// send status bytes
-			  aTxBuffer[3]='\n';
-        aTxBuffer[4]='F';
-        aTxBuffer[5]='A';
-        aTxBuffer[6]='T';
-        aTxBuffer[7]='A';
-        aTxBuffer[8]='L';
-        aTxBuffer[9]='\n';
-        uart_write(aTxBuffer,10);
+			  uart_write("\nFATAL\n",7,&uart1);
         Error_Handler();
       }else{
-        aTxBuffer[3]='\n';
-        uart_write(aTxBuffer,4);
+        uart_write("\n",1,&uart1);
       }
     }
   }else{//not the first match in one transaction, so we got our address after restart - we should already have register address
     if(i2cState==I2C_SLAVE_HAVEADDR){
       if(TransferDirection==I2C_DIRECTION_TRANSMIT/*from Master point of view*/){//very strange, direction before restart was incoming, and after restart also incoming
-        aTxBuffer[1]='R';
-        aTxBuffer[2]='W';
+        uart_buffer("RW",2,&uart1);
         i2cState=I2C_SLAVE_WRITEREG;
         if (HAL_I2C_Slave_Seq_Receive_IT(hi2c, aRxBuffer+1, 1, I2C_FIRST_FRAME/*allow more incoming bytes after this one*/) != HAL_OK) {//lets try to get byte from master
-			    aTxBuffer[3]='\n';
-          aTxBuffer[4]='F';
-          aTxBuffer[5]='A';
-          aTxBuffer[6]='T';
-          aTxBuffer[7]='A';
-          aTxBuffer[8]='L';
-          aTxBuffer[9]='\n';
-          uart_write(aTxBuffer,10);
+			    uart_write("\nFATAL\n",7,&uart1);
           Error_Handler();
         }else{
-          aTxBuffer[3]='\n';
-          uart_write(aTxBuffer,4);
+          uart_write("\n",1,&uart1);
         }
       }else{//direction change after restart, we sending register data to the master
-        aTxBuffer[1]='D';
-        aTxBuffer[2]='R';
-        aTxBuffer[3]=hexBuf[(rv&0xF0U)>>4];
-        aTxBuffer[4]=hexBuf[rv&0x0FU];
+        uart_buffer("DR",2,&uart1);
+        uart_buffer_byte(hexBuf[(rv&0xF0U)>>4],&uart1);
+        uart_buffer_byte(hexBuf[rv&0x0FU],&uart1);
         i2cState=I2C_SLAVE_READREG;
         i2cTxBuffer[0]=rv;
         if (HAL_I2C_Slave_Seq_Transmit_IT(hi2c, i2cTxBuffer, 1, I2C_FIRST_FRAME/*no more restarts, but we can send  more bytes after this one*/) != HAL_OK) {
-          aTxBuffer[5]='\n';
-          aTxBuffer[6]='F';
-          aTxBuffer[7]='A';
-          aTxBuffer[8]='T';
-          aTxBuffer[9]='\n';
-          uart_write(aTxBuffer,10);
+          uart_write("\nFATAL\n",7,&uart1);
           Error_Handler();
         }else{
-          aTxBuffer[5]='\n';
-          uart_write(aTxBuffer,6);
+          uart_write("\n",1,&uart1);
         }
         rv++;
       }
     }else{//unknown situation
-      aTxBuffer[0]='A';
-      aTxBuffer[1]='R';
-      aTxBuffer[2]='U';
-      aTxBuffer[3]='S';
-      aTxBuffer[4]=hexBuf[(i2cState&0xF0U)>>4];
-      aTxBuffer[5]=hexBuf[i2cState&0x0FU];
-      aTxBuffer[6]='\n';
-      uart_write(aTxBuffer,7);
+      uart_buffer("ARUS",4,&uart1);
+      uart_buffer_byte(hexBuf[(i2cState&0xF0U)>>4],&uart1);
+      uart_buffer_byte(hexBuf[i2cState&0x0FU],&uart1);
+      uart_write("\n",1,&uart1);
     }
   }
 }
@@ -352,7 +273,7 @@ int main(void)
   uart1.tx = &txFifo;
 	fifo_init(uart1.tx,128,uart1TxBuff);
   
-  uart_write((uint8_t *)"\nProject f030_wms_bmp_serial_i2c is ongoing\n", 47);
+  uart_write("\nProject f030_wms_bmp_serial_i2c is ongoing\n", 44,&uart1);
   // listen for address match on I2C bus
   if(HAL_I2C_EnableListen_IT(&hi2c1) != HAL_OK){
     Error_Handler();

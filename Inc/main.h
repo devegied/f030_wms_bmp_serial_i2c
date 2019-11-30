@@ -32,15 +32,12 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "fifo.h"
+#include "buffered_uart.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-typedef struct __uartTypeDef {
-  UART_HandleTypeDef *huart;
-  FIFO *tx;
-} uartTypeDef;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -57,7 +54,6 @@ typedef struct __uartTypeDef {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-void uart_write(const uint8_t *buf, int len);
 void HAL_I2C_SlaveTxCpltCallback(I2C_HandleTypeDef *hi2c);
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c);
 void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c);
