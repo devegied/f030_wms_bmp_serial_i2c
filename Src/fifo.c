@@ -56,17 +56,14 @@ uint8_t fifo_isFull(FIFO* f) {
     return (f->status == FIFO_OVERFLOW);
 }
 uint8_t fifo_isEmpty(FIFO* f) {
-    //return (f->in == f->out);
     return (f->status == FIFO_UNDERFLOW);
 }
 uint8_t fifo_get(FIFO* f) {
     uint8_t c;
     if (f->status != FIFO_UNDERFLOW) {
         c = f->data[f->out];
-        //f->data[f->out] = 0;//MOD+ zero out unused buffer space
         if(++f->out==f->size)
             f->out = 0U;
-        //f->out = (f->out+1) % f->size;
         f->status = (f->out == f->in)?FIFO_UNDERFLOW:FIFO_GOOD;
         return c;
     } else {
@@ -76,7 +73,6 @@ uint8_t fifo_get(FIFO* f) {
 uint8_t fifo_put(FIFO* f, uint8_t c) {
     if (f->status != FIFO_OVERFLOW){
         f->data[f->in] = c;
-        //f->in = (f->in+1) % f->size;
         if(++f->in==f->size)
             f->in = 0U;
         f->status = (f->in == f->out)?FIFO_OVERFLOW:FIFO_GOOD;
@@ -89,7 +85,6 @@ uint8_t fifo_peek(FIFO* f) {
     return f->data[f->out];
 }
 uint8_t fifo_available(FIFO* f) {
-    //return f->used;
     int8_t r = f->in - f->out;
     return r >= 0 ? r : r + f->size;
 }
